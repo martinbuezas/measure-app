@@ -2,25 +2,36 @@
 from scipy.spatial import distance as dist
 from imutils import perspective
 from imutils import contours
+from imutils.object_detection import non_max_suppression
 import numpy as np
 import argparse
 import imutils
 import cv2
 
 class MeasureApp(object):
+	
+	src_path          = 'imgs/prep/flor-1.jpg'
+	src_width         = 12
+	
+	show_image        = False
+	show_bounding_box = False
+	
+	hog_width         = 200
+	hog_winstride     = (2,2)
+	hog_padding       = (8,8)
+	hog_scale         = 1.05
+	hog_mean_shift    = False
 
-	src_path  = 'imgs/juani-1.jpeg'
-	src_width = 12
+	img_src           = None
+	img_gray          = None
+	img_edged         = None
+	cnts              = None
+	px_per_metric     = None
 
-	img_src   = None
-	img_gray  = None
-	img_edged = None
-
-	cnts = None
-	px_per_metric = None
 
 	def __init__(self):
 		self.parseArgs()
+		self.detectPerson()
 		self.getContours()
 		self.processContours()
 
@@ -42,6 +53,37 @@ class MeasureApp(object):
 
 		self.src_path  = self.src_path if args["image"] == None else args["image"]
 		self.src_width = self.src_width if args["width"] == None else args["width"]
+
+	def detectPerson(self):
+		hog = cv2.HOGDescriptor()
+		hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+		hogParams = {
+			'winStride': self.hog_winstride, 
+			'padding': self.hog_padding,
+			'scale': self.hog_scale,
+			'useMeanshiftGrouping': self.hog_mean_shift
+		}
+
+		img  = cv2.imread(self.src_path)
+		img  = imutils.resize(img, width=min(self.hog_width, img.shape[1]))
+		img_all = img.copy()
+		img_nms = img.copy()
+
+		(rects, weights) = hog.detectMultiScale(img, **hogParams)
+
+		# draw all rects
+		for (x, y, w, h) in rects:
+			cv2.rectangle(img_all, (x, y), (x + w, y + h), (0, 0, 255), 2)
+
+		# draw rects left after applying non max suppresion
+		rects = np.array([[x, y, x + w, y + h] for (x, y, w, h) in rects])
+		pick  = non_max_suppression(rects, probs=None, overlapThresh=0.65)
+		for (xA, yA, xB, yB) in pick:
+			cv2.rectangle(img_nms, (xA, yA), (xB, yB), (0, 255, 0), 2)
+
+		cv2.imshow("Measure App 1", img_all)
+		cv2.imshow("Measure App 2", img_nms)
+		cv2.waitKey(0)
 
 	def getContours(self):
 		# load the image, convert it to grayscale, and blur it slightly
@@ -65,22 +107,26 @@ class MeasureApp(object):
 		self.cnts = cnts
 
 	def processContours(self):
-
 		for c in self.cnts:
-
 			# if the contour is not sufficiently large, ignore it
 			if cv2.contourArea(c) < 100:
 				continue
 			
-			# draw image + edges
-			img_out = cv2.addWeighted(
-				self.addAlphaChannel(self.img_src), 1, 
-				self.addAlphaChannel(self.img_edged, True), 1, 0
-			)
+			# draw image and/or edges
+			if self.show_image:
+				img_out = cv2.addWeighted(
+					self.addAlphaChannel(self.img_src), 1, 
+					self.addAlphaChannel(self.img_edged, True), 1, 0
+				)
+			else:
+				img_out = self.addAlphaChannel(self.img_edged, True)
 
+			# draw contours
 			self.drawContourPoints(c, img_out)
-			
-			self.drawContourBoundingBox(c, img_out)
+
+			if self.show_bounding_box:
+				# draw bounding box
+				self.drawContourBoundingBox(c, img_out)
 
 			cv2.imshow("MeasureApp", img_out)
 			cv2.setMouseCallback("MeasureApp", self.onClick)
@@ -155,14 +201,12 @@ class MeasureApp(object):
 			0.65, (255, 255, 255), 2)
 
 	''' EVENTS '''
-	# --------------------------------------------------------------------------
 
 	def onClick(self, event, x, y, flags, param):
 		if event == cv2.EVENT_LBUTTONDOWN:
 			print x, y
 
 	''' HELPERS '''
-	# --------------------------------------------------------------------------
 
 	def getMidpoint(self, ptA, ptB):
 		return ((ptA[0] + ptB[0]) * 0.5, (ptA[1] + ptB[1]) * 0.5)

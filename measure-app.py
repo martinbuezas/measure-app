@@ -10,7 +10,7 @@ import cv2
 
 class MeasureApp(object):
 	
-	src_path          = 'imgs/prep/flor-1.jpg'
+	src_path          = 'imgs/prep/juani-1.jpg'
 	src_width         = 12
 	
 	show_image        = False
@@ -40,13 +40,15 @@ class MeasureApp(object):
 
 		ap.add_argument(
 			"-i", "--image", 
-			required = False, help = "Input image path"
+			required = False, 
+			help = "Input image path"
 		)
 
 		ap.add_argument(
 			"-w", "--width", 
 			type = float, 
-			required = False, help = "Width of the left-most object in cm (marker)"
+			required = False,
+			help = "Width of the left-most object in cm (marker)"
 		)
 	
 		args = vars(ap.parse_args())
@@ -64,25 +66,34 @@ class MeasureApp(object):
 			'useMeanshiftGrouping': self.hog_mean_shift
 		}
 
-		img  = cv2.imread(self.src_path)
-		img  = imutils.resize(img, width=min(self.hog_width, img.shape[1]))
-		img_all = img.copy()
-		img_nms = img.copy()
+		img_src = cv2.imread(self.src_path)
+		img_hog = img_src.copy()
+		
+		factor  = img_hog.shape[1] / self.hog_width;
+		img_hog = imutils.resize(img_hog, width=min(self.hog_width, img_hog.shape[1]))
+		
 
-		(rects, weights) = hog.detectMultiScale(img, **hogParams)
+		(rects, weights) = hog.detectMultiScale(img_hog, **hogParams)
 
 		# draw all rects
 		for (x, y, w, h) in rects:
-			cv2.rectangle(img_all, (x, y), (x + w, y + h), (0, 0, 255), 2)
+			x *= factor;
+			y *= factor;
+			w *= factor;
+			h *= factor;
+			cv2.rectangle(img_src, (x, y), (x + w, y + h), (0, 0, 255), 1)
 
 		# draw rects left after applying non max suppresion
 		rects = np.array([[x, y, x + w, y + h] for (x, y, w, h) in rects])
-		pick  = non_max_suppression(rects, probs=None, overlapThresh=0.65)
+		pick  = non_max_suppression(rects, probs=None, overlapThresh=0.65)	
 		for (xA, yA, xB, yB) in pick:
-			cv2.rectangle(img_nms, (xA, yA), (xB, yB), (0, 255, 0), 2)
+			xA *= factor
+			yA *= factor
+			xB *= factor
+			yB *= factor
+			cv2.rectangle(img_src, (xA, yA), (xB, yB), (0, 255, 0), 2)
 
-		cv2.imshow("Measure App 1", img_all)
-		cv2.imshow("Measure App 2", img_nms)
+		cv2.imshow("MeasureApp", img_src)
 		cv2.waitKey(0)
 
 	def getContours(self):
